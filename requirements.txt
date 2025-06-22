@@ -10,9 +10,9 @@ seaborn==0.12.2
 
 # Computer vision (optional - for real face detection)
 opencv-python==4.8.0.74
-dlib==19.24.2
+dlib==19.22.99
 fer==22.5.1
-mediapipe==0.10.1
+mediapipe==0.10.21
 
 # Deep learning (optional - for neural network strategies)
 tensorflow==2.13.0
@@ -24,7 +24,7 @@ requests==2.31.0
 
 # Development and testing
 pytest==7.4.0
-pytest-pygame==1.0.1
+# pytest-pygame==1.0.1
 black==23.7.0
 flake8==6.0.0
 

@@ -1,6 +1,6 @@
 # 🪳 Cockroach Poker - AI Bluff Detection Research Platform
 
-A comprehensive research platform for studying AI bluff detection capabilities using a simplified two-player version of Cockroach Poker. This project is designed to test different AI models and analyze their ability to detect human deception through behavioral cues, timing patterns, and facial expressions.
+A research platform for studying AI bluff detection capabilities using a simplified two-player version of Cockroach Poker. This project is designed to test different AI models and analyze their ability to detect human deception through behavioral cues, timing patterns, and facial expressions.
 
 ## 🎯 Project Overview
 
