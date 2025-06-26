@@ -15,6 +15,13 @@ from typing import List, Optional, Dict, Any
 import cv2
 import numpy as np
 
+# Import our AI strategies
+try:
+    from ai_strategies import get_strategy, get_all_strategies, AVAILABLE_STRATEGIES
+except ImportError:
+    print("⚠️ ai_strategies.py not found, using built-in simple AI")
+    AVAILABLE_STRATEGIES = {'simple': None}
+
 # Constants
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 800
@@ -166,131 +173,24 @@ class FaceDetector:
         }
 
 
-class AIStrategy:
-    """Smart AI that actually learns patterns"""
+class SimpleAI:
+    """Fallback AI if ai_strategies.py is not available"""
 
-    def __init__(self, name: str):
-        self.name = name
-        self.decision_history = []
-        self.player_stats = {
-            'total_claims': 0,
-            'total_bluffs': 0,
-            'avg_decision_time': 2.0,
-            'nervous_when_bluffing': 0,
-            'nervous_when_truthful': 0
-        }
+    def __init__(self):
+        self.name = "Simple AI"
+        self.description = "Basic fallback AI"
 
-    def should_challenge(self, claimed_creature: str, game_state: Dict, face_data: Dict, decision_time: float) -> bool:
-        """Decide whether to call BLUFF (True) or TRUE (False)"""
-        suspicion_score = 0.0
-
-        # Base suspicion - start neutral
-        suspicion_score = 0.4
-
-        # Analyze decision timing
-        avg_time = self.player_stats['avg_decision_time']
-        if decision_time > avg_time * 1.4:
-            suspicion_score += 0.25  # Took too long - might be deciding to lie
-        elif decision_time < avg_time * 0.6:
-            suspicion_score += 0.15  # Too quick - prepared lie?
-
-        # Analyze facial expression
-        emotion = face_data.get('emotion', 'neutral')
-        confidence = face_data.get('confidence', 0.5)
-
-        if emotion == 'nervous' and confidence > 0.7:
-            # Check if nervousness correlates with bluffing for this player
-            if self.player_stats['nervous_when_bluffing'] > self.player_stats['nervous_when_truthful']:
-                suspicion_score += 0.4
-            else:
-                suspicion_score += 0.2
-        elif emotion == 'confident' and confidence > 0.8:
-            suspicion_score -= 0.1  # Genuine confidence might mean truth
-
-        # Consider player's overall bluff rate
-        if self.player_stats['total_claims'] > 0:
-            bluff_rate = self.player_stats['total_bluffs'] / self.player_stats['total_claims']
-            if bluff_rate > 0.6:
-                suspicion_score += 0.2  # Known frequent liar
-            elif bluff_rate < 0.3:
-                suspicion_score -= 0.1  # Usually honest
-
-        # Strategic consideration: how many of this creature does human have?
-        human_creature_count = game_state.get('human_creature_counts', {}).get(claimed_creature, 0)
-        if human_creature_count >= 2:
-            suspicion_score += 0.3  # Human has many - they don't want more!
-        elif human_creature_count == 0:
-            suspicion_score -= 0.1  # Human has none - they might want this
-
-        # Cap suspicion score
-        suspicion_score = max(0.1, min(0.9, suspicion_score))
-
-        # Return True for "BLUFF", False for "TRUE"
-        return random.random() < suspicion_score
+    def should_call_bluff(self, claimed_creature: str, game_state: Dict, face_data: Dict, decision_time: float) -> bool:
+        return random.random() < 0.5
 
     def choose_claim(self, actual_creature: str, game_state: Dict) -> str:
-        """Choose what to claim when passing a card"""
-        # Strategic bluffing
-        human_counts = game_state.get('human_creature_counts', {})
-
-        # Find creatures human has many of (dangerous for them to get more)
-        dangerous_for_human = [creature for creature, count in human_counts.items() if count >= 2]
-
-        # Very strategic: if human has 2 of something, claim that to try to hurt them!
-        if dangerous_for_human and random.random() < 0.5:
-            target_creature = random.choice(dangerous_for_human)
-            print(f"AI strategically claims {target_creature} (human has {human_counts[target_creature]})")
-            return target_creature
-
-        # Sometimes tell the truth (60% of time when not being strategic)
         if random.random() < 0.6:
             return actual_creature
-
-        # Otherwise pick a random lie that's not too dangerous for us
-        ai_counts = game_state.get('ai_creature_counts', {})
-        safe_lies = [c for c in CREATURES if c != actual_creature and ai_counts.get(c, 0) < 2]
-
-        if safe_lies:
-            return random.choice(safe_lies)
-        else:
-            # No safe lies, just pick any lie
-            possible_lies = [c for c in CREATURES if c != actual_creature]
-            return random.choice(possible_lies)
+        creatures = ['Cockroach', 'Rat', 'Stinkbug', 'Fly', 'Spider', 'Scorpion']
+        return random.choice([c for c in creatures if c != actual_creature])
 
     def learn_from_outcome(self, was_bluff: bool, opponent_called_bluff: bool, face_data: Dict, decision_time: float):
-        """Update learning based on what happened"""
-        self.player_stats['total_claims'] += 1
-        if was_bluff:
-            self.player_stats['total_bluffs'] += 1
-
-        # Update average decision time
-        old_avg = self.player_stats['avg_decision_time']
-        new_avg = (old_avg * 0.8) + (decision_time * 0.2)  # Weighted average
-        self.player_stats['avg_decision_time'] = new_avg
-
-        # Learn emotion patterns
-        emotion = face_data.get('emotion', 'neutral')
-        if emotion == 'nervous':
-            if was_bluff:
-                self.player_stats['nervous_when_bluffing'] += 1
-            else:
-                self.player_stats['nervous_when_truthful'] += 1
-
-        # Determine if opponent was correct
-        opponent_correct = (opponent_called_bluff and was_bluff) or (not opponent_called_bluff and not was_bluff)
-
-        # Store this decision for analysis
-        self.decision_history.append({
-            'was_bluff': was_bluff,
-            'opponent_called_bluff': opponent_called_bluff,
-            'emotion': emotion,
-            'decision_time': decision_time,
-            'opponent_correct': opponent_correct
-        })
-
-        # Keep only recent history
-        if len(self.decision_history) > 20:
-            self.decision_history.pop(0)
+        pass
 
 
 class Game:
@@ -315,7 +215,14 @@ class Game:
         self.message_timer = 0
 
         # AI and detection
-        self.ai_strategy = AIStrategy("Smart AI")
+        if 'simple' not in AVAILABLE_STRATEGIES:
+            self.ai_strategy = get_strategy('learning')  # Default to learning AI
+            self.available_strategies = list(AVAILABLE_STRATEGIES.keys())
+        else:
+            self.ai_strategy = SimpleAI()  # Fallback
+            self.available_strategies = ['simple']
+
+        self.current_strategy_index = 0
         self.face_detector = FaceDetector()
 
         # UI state
@@ -355,6 +262,32 @@ class Game:
 
         self.set_message("Your turn! Select a card and choose what to claim it is.")
 
+    def switch_ai_strategy(self):
+        """Switch to next available AI strategy"""
+        if len(self.available_strategies) <= 1:
+            return
+
+        self.current_strategy_index = (self.current_strategy_index + 1) % len(self.available_strategies)
+        strategy_name = self.available_strategies[self.current_strategy_index]
+
+        if 'simple' not in AVAILABLE_STRATEGIES:
+            self.ai_strategy = get_strategy(strategy_name)
+            self.set_message(f"Switched to {self.ai_strategy.name}")
+        else:
+            self.set_message("Only Simple AI available")
+
+    def switch_to_strategy(self, index: int):
+        """Switch to specific strategy by index"""
+        if 0 <= index < len(self.available_strategies):
+            self.current_strategy_index = index
+            strategy_name = self.available_strategies[index]
+
+            if 'simple' not in AVAILABLE_STRATEGIES:
+                self.ai_strategy = get_strategy(strategy_name)
+                self.set_message(f"Switched to {self.ai_strategy.name}")
+            else:
+                self.set_message("Only Simple AI available")
+
     def set_message(self, text: str, duration: float = 4.0):
         """Set a temporary message"""
         self.message = text
@@ -371,6 +304,13 @@ class Game:
                     self.init_new_game()
                 elif event.key == pygame.K_r:
                     self.init_new_game()
+                elif event.key == pygame.K_TAB and len(self.available_strategies) > 1:
+                    self.switch_ai_strategy()
+                elif event.key >= pygame.K_1 and event.key <= pygame.K_5:
+                    # Quick switch to strategy 1-5
+                    strategy_index = event.key - pygame.K_1
+                    if strategy_index < len(self.available_strategies):
+                        self.switch_to_strategy(strategy_index)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self.handle_mouse_click(event.pos)
@@ -461,7 +401,7 @@ class Game:
                                    self.ai_player.table_cards}
         }
 
-        ai_challenges = self.ai_strategy.should_challenge(
+        ai_challenges = self.ai_strategy.should_call_bluff(
             self.claimed_creature, game_state, face_data, decision_time
         )
 
@@ -659,6 +599,25 @@ class Game:
             stats_rect = stats.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 180))
             self.screen.blit(stats, stats_rect)
 
+        # Show current AI strategy and controls
+        if len(self.available_strategies) > 1:
+            strategy_text = f"Current AI: {self.ai_strategy.name}"
+            strategy_surface = self.font.render(strategy_text, True, YELLOW)
+            strategy_rect = strategy_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT - 100))
+            self.screen.blit(strategy_surface, strategy_rect)
+
+            controls_text = "Press TAB to switch AI | Press 1-5 for specific strategy"
+            controls_surface = self.font.render(controls_text, True, LIGHT_GRAY)
+            controls_rect = controls_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT - 70))
+            self.screen.blit(controls_surface, controls_rect)
+
+            # Show available strategies
+            strategies_text = " | ".join(
+                [f"{i + 1}:{name.title()}" for i, name in enumerate(self.available_strategies)])
+            strategies_surface = self.font.render(strategies_text, True, LIGHT_GRAY)
+            strategies_rect = strategies_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT - 40))
+            self.screen.blit(strategies_surface, strategies_rect)
+
     def draw_game(self):
         """Draw game screen"""
         # Phase indicator
@@ -814,17 +773,37 @@ class Game:
         # Face detection info
         face_data = self.face_detector.get_current_state()
         face_text = self.font.render(f"Emotion: {face_data['emotion']} ({face_data['confidence']:.2f})", True, WHITE)
-        self.screen.blit(face_text, (WINDOW_WIDTH - 300, 80))
+        self.screen.blit(face_text, (WINDOW_WIDTH - 350, 80))
 
-        # AI learning stats
-        if self.ai_strategy.player_stats['total_claims'] > 0:
+        # AI strategy info
+        ai_text = self.font.render(f"AI: {self.ai_strategy.name}", True, YELLOW)
+        self.screen.blit(ai_text, (WINDOW_WIDTH - 350, 110))
+
+        # AI description
+        if hasattr(self.ai_strategy, 'description'):
+            desc_text = self.font.render(self.ai_strategy.description[:30] + "...", True, LIGHT_GRAY)
+            self.screen.blit(desc_text, (WINDOW_WIDTH - 350, 130))
+
+        # AI learning stats (if available)
+        if hasattr(self.ai_strategy, 'player_stats') and self.ai_strategy.player_stats['total_claims'] > 0:
             bluff_rate = self.ai_strategy.player_stats['total_bluffs'] / self.ai_strategy.player_stats['total_claims']
             stats_text = self.font.render(f"Your Bluff Rate: {bluff_rate:.1%}", True, WHITE)
-            self.screen.blit(stats_text, (WINDOW_WIDTH - 300, 110))
+            self.screen.blit(stats_text, (WINDOW_WIDTH - 350, 160))
 
             avg_time = self.ai_strategy.player_stats['avg_decision_time']
-            time_text = self.font.render(f"Avg Decision Time: {avg_time:.1f}s", True, WHITE)
-            self.screen.blit(time_text, (WINDOW_WIDTH - 300, 140))
+            time_text = self.font.render(f"Avg Decision: {avg_time:.1f}s", True, WHITE)
+            self.screen.blit(time_text, (WINDOW_WIDTH - 350, 180))
+
+            # Show AI's recent accuracy if available
+            if hasattr(self.ai_strategy, 'player_stats') and 'recent_accuracy' in self.ai_strategy.player_stats:
+                accuracy = self.ai_strategy.player_stats['recent_accuracy']
+                acc_text = self.font.render(f"AI Accuracy: {accuracy:.1%}", True, WHITE)
+                self.screen.blit(acc_text, (WINDOW_WIDTH - 350, 200))
+
+        # Strategy switching controls
+        if len(self.available_strategies) > 1:
+            switch_text = self.font.render("TAB: Switch AI", True, GRAY)
+            self.screen.blit(switch_text, (WINDOW_WIDTH - 350, 230))
 
         # Message
         if self.message and self.message_timer > 0:
