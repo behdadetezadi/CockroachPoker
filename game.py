@@ -313,6 +313,40 @@ class CockroachPokerUI:
         bluff_btn = Button(SCREEN_WIDTH // 2 + 10, SCREEN_HEIGHT // 2 - 20, 120, 60, "BLUFF", RED, DARK_GRAY)
         self.response_buttons = [('truth', truth_btn), ('bluff', bluff_btn)]
 
+    def calculate_cards_remaining(self) -> Dict[str, int]:
+        """
+        ✅ FIXED: Calculate actual remaining cards based on game state
+
+        Known cards:
+        - AI's hand (AI knows its own cards)
+        - Both players' face-up cards (public knowledge)
+
+        Unknown cards:
+        - Player's hand
+        - Remaining deck
+        """
+        cards_remaining = defaultdict(int)
+
+        # Start with total cards per animal
+        for animal in GAME_CONFIG['animals']:
+            cards_remaining[animal] = GAME_CONFIG['cards_per_animal']
+
+        # Subtract AI's hand (AI knows these)
+        for card in self.state.ai_hand:
+            cards_remaining[card] -= 1
+
+        # Subtract face-up cards (public knowledge)
+        for card in self.state.player_face_up:
+            cards_remaining[card] -= 1
+        for card in self.state.ai_face_up:
+            cards_remaining[card] -= 1
+
+        # Ensure non-negative
+        for animal in cards_remaining:
+            cards_remaining[animal] = max(0, cards_remaining[animal])
+
+        return cards_remaining
+
     def update_card_positions(self):
         """Update card positions based on current hands"""
         # Player hand - positioned at bottom with more spacing from edge
@@ -503,7 +537,6 @@ class CockroachPokerUI:
             'player_face_up': self.state.player_face_up,
             'ai_face_up': self.state.ai_face_up,
             'current_claim': self.state.current_claim,
-            # NO current_card - AI can't see it yet!
         }
 
         # AI makes decision based only on observable info
@@ -518,44 +551,43 @@ class CockroachPokerUI:
         is_truth = (card == claim)
 
         # FIXED REWARD SYSTEM:
-        # Correct guess = GOOD (+1)
-        # Wrong guess = BAD (-1)
         if (response == 'truth' and is_truth) or (response == 'bluff' and not is_truth):
-            # AI guessed CORRECTLY
             self.state.player_face_up.append(card)
             self.message = f"AI calls {response.upper()}! Correct! The card was a {card}"
             self.sub_message = "Card goes to you"
-            reward = +1  # ✅ FIXED: Reward correct guessing
+            reward = +1
         else:
-            # AI guessed WRONG
             self.state.ai_face_up.append(card)
             self.message = f"AI calls {response.upper()}! Wrong! The card was a {card}"
             self.sub_message = "Card goes to AI"
-            reward = -1  # ✅ FIXED: Penalize wrong guessing
+            reward = -1
 
-        # Check for terminal state (game over)
+        # Check for terminal state (game over) - ✅ FIXED: Check both conditions
         winner = self.state.check_loss_condition()
-        is_terminal = False
+        if not winner:
+            winner = self.state.check_empty_hands()
+
+        is_terminal = (winner is not None)
 
         if winner == 'ai':
-            reward += 50  # ✅ BIG bonus for winning
-            is_terminal = True
+            reward += 50
         elif winner == 'player':
-            reward -= 50  # ✅ BIG penalty for losing
-            is_terminal = True
+            reward -= 50
 
         # Update agent's belief state (POMDP)
         if self.agent and hasattr(self.agent, 'update_belief'):
-            # Estimate cards remaining (simplified - could be more accurate)
-            cards_remaining = defaultdict(int)
-            for animal in GAME_CONFIG['animals']:
-                cards_remaining[animal] = 1  # Simplified
+            cards_remaining = self.calculate_cards_remaining()
             self.agent.update_belief(claim, card, cards_remaining)
 
-        # Log with observable state + outcome for training
-        log_state = observable_state.copy()
-        log_state['current_card'] = card  # Include for training analysis
-        log_state['game_over'] = is_terminal
+        # ✅ FIXED: Create log state AFTER face-up piles are updated
+        log_state = {
+            'ai_hand': self.state.ai_hand.copy(),
+            'player_face_up': self.state.player_face_up.copy(),  # ✅ Now includes new card
+            'ai_face_up': self.state.ai_face_up.copy(),  # ✅ Now includes new card
+            'current_claim': claim,
+            'current_card': card,
+            'game_over': is_terminal
+        }
 
         self.logger.log_state_action(
             log_state,
@@ -625,22 +657,21 @@ class CockroachPokerUI:
                     self.sub_message = "Card goes to you"
                     reward = -1  # Player guessed wrong (bad for player)
 
-                # Check for terminal state
+                # ✅ FIXED: Check both conditions
                 winner = self.state.check_loss_condition()
-                is_terminal = False
+                if not winner:
+                    winner = self.state.check_empty_hands()
+
+                is_terminal = (winner is not None)
 
                 if winner == 'player':
-                    reward += 50  # Player wins
-                    is_terminal = True
+                    reward += 50
                 elif winner == 'ai':
-                    reward -= 50  # Player loses
-                    is_terminal = True
+                    reward -= 50
 
-                # Update agent's belief if available
+                # Update agent's belief if available with ✅ FIXED cards_remaining
                 if self.agent and hasattr(self.agent, 'update_belief'):
-                    cards_remaining = defaultdict(int)
-                    for animal in GAME_CONFIG['animals']:
-                        cards_remaining[animal] = 1
+                    cards_remaining = self.calculate_cards_remaining()
                     self.agent.update_belief(claim, card, cards_remaining)
 
                 # Log state
@@ -667,20 +698,7 @@ class CockroachPokerUI:
                     if self.state.claiming_player == 'ai' and self.state.ai_hand:
                         pygame.time.set_timer(pygame.USEREVENT + 2, 2000)
 
-                return None
-                self.state.phase = 'claim'
-                self.state.switch_claiming_player()
-
-                # Check for game over
-                if not self.check_game_over():
-                    # Schedule next turn
-                    if self.state.claiming_player == 'player' and not self.state.player_hand:
-                        self.state.switch_claiming_player()
-
-                    if self.state.claiming_player == 'ai' and self.state.ai_hand:
-                        pygame.time.set_timer(pygame.USEREVENT + 2, 2000)
-
-                return
+                return  # ✅ FIXED: Removed duplicate dead code below this
 
     def check_game_over(self) -> bool:
         """Check if game has ended"""
