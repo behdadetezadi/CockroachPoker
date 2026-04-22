@@ -156,26 +156,15 @@ class DQNAgent:
         Calculate the size of state representation
 
         State features:
-        - AI hand composition: 8 animals * max count (let's say 8) = 64 (one-hot style)
-        - Player face-up: 8 animals * 8 = 64
-        - AI face-up: 8 animals * 8 = 64
-        - Current claim: 8 (one-hot encoded)
-        - Belief probability: 1
-        - Recent bluff rate: 1
-        - AI has claimed count: 1
-
-        Total: ~195 features (we'll use simpler encoding)
-
-        Simpler encoding:
-        - AI hand counts: 8 floats (normalized)
-        - Player face-up counts: 8 floats (normalized)
-        - AI face-up counts: 8 floats (normalized)
-        - Claim one-hot: 8 floats
+        - AI hand counts: N floats (normalized, N = num_animals)
+        - Player face-up counts: N floats
+        - AI face-up counts: N floats
+        - Claim one-hot: N floats
         - Belief prob: 1 float
         - Bluff rate: 1 float
         - AI has count: 1 float
 
-        Total: 35 features
+        Total: N*4 + 3 features  (19 for 4 animals)
         """
         num_animals = len(self.config['animals'])
 
@@ -657,7 +646,7 @@ def main():
     """Main entry point for training/testing DQN"""
     GAME_CONFIG = {
         'hand_size': 5,
-        'animals': ['fly', 'rat', 'toad', 'bat', 'spider', 'cockroach', 'scorpion', 'stinkbug'],
+        'animals': ['fly', 'rat', 'toad', 'bat'],
         'lose_threshold': 3,
         'cards_per_animal': 8
     }

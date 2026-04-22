@@ -793,14 +793,15 @@ class CockroachPokerUI:
 def main():
     """Entry point for the game"""
     print("\n" + "=" * 60)
-    print("COCKROACH POKER - POMDP EDITION")
+    print("COCKROACH POKER - RL EDITION")
     print("=" * 60)
     print("\nOptions:")
     print("1. Play with RANDOM AI (data collection)")
-    print("2. Play with TRAINED AI (after training)")
-    print("3. Exit")
+    print("2. Play with POMDP AI (tabular Q-learning)")
+    print("3. Play with DQN AI (deep Q-network)")
+    print("4. Exit")
 
-    choice = input("\nEnter choice (1-3): ").strip()
+    choice = input("\nEnter choice (1-4): ").strip()
 
     if choice == '1':
         print("\n" + "=" * 60)
@@ -817,17 +818,15 @@ def main():
 
     elif choice == '2':
         print("\n" + "=" * 60)
-        print("PLAYING WITH TRAINED AI")
+        print("PLAYING WITH POMDP AI")
         print("=" * 60)
 
         try:
             from ai_agent import POMDPAgent
 
-            print("\nInitializing AI agent...")
+            print("\nInitializing POMDP agent...")
             agent = POMDPAgent(GAME_CONFIG)
 
-            # Show AI statistics
-            print("\nAI Statistics:")
             stats = agent.get_statistics()
             print(f"  States learned: {stats['states']}")
             print(f"  State-action pairs: {stats['state_action_pairs']}")
@@ -837,10 +836,9 @@ def main():
 
             if stats['states'] == 0:
                 print("\n⚠️  WARNING: AI has no training data!")
-                print("  The AI will make random guesses.")
                 print("  Play some games (option 1), then train (python ai_agent.py)")
             else:
-                print("\n✓ AI is trained and ready!")
+                print("\n✓ POMDP AI is trained and ready!")
 
             print("\n" + "=" * 60)
             print("\nGame Rules:")
@@ -856,16 +854,56 @@ def main():
 
             print("\n" + "=" * 60)
             print("Thanks for playing!")
-            print("\nTo train AI on games you just played:")
-            print("  python ai_agent.py")
-            print("  Choose option 1 (Train agent)")
+            print("\nTo retrain POMDP AI:  python ai_agent.py")
             print("=" * 60)
 
         except ImportError:
             print("\n❌ Error: ai_agent.py not found!")
-            print("Make sure ai_agent.py is in the same directory.")
 
     elif choice == '3':
+        print("\n" + "=" * 60)
+        print("PLAYING WITH DQN AI")
+        print("=" * 60)
+
+        try:
+            from dqn_agent import DQNAgent
+
+            print("\nInitializing DQN agent...")
+            agent = DQNAgent(GAME_CONFIG)
+
+            stats = agent.get_statistics()
+            print(f"  Training steps: {stats.get('training_step', 0)}")
+            print(f"  Epsilon: {stats.get('epsilon', 1.0):.3f}")
+            print(f"  Replay buffer size: {stats.get('replay_buffer_size', 0)}")
+
+            if stats.get('training_step', 0) == 0:
+                print("\n⚠️  WARNING: DQN has not been trained yet!")
+                print("  The AI will explore randomly.")
+                print("  Train first: python dqn_agent.py (option 1)")
+            else:
+                print("\n✓ DQN AI is trained and ready!")
+
+            print("\n" + "=" * 60)
+            print("\nGame Rules:")
+            print("  • Select a card, then choose what to claim")
+            print("  • When AI claims, decide: TRUTH or BLUFF")
+            print("  • Get 3 of same animal → YOU LOSE")
+            print("  • AI gets 3 of same animal → YOU WIN")
+            print("\n" + "=" * 60)
+            input("\nPress ENTER to start game...")
+
+            game = CockroachPokerUI(ai_agent=agent)
+            game.run()
+
+            print("\n" + "=" * 60)
+            print("Thanks for playing!")
+            print("\nTo retrain DQN AI:  python dqn_agent.py")
+            print("=" * 60)
+
+        except ImportError:
+            print("\n❌ Error: dqn_agent.py not found!")
+
+    elif choice == '4':
         print("Goodbye!")
 
     else:

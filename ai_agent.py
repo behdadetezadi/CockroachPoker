@@ -44,12 +44,17 @@ class BeliefState:
             'was_truth': was_truth
         })
 
-        # Update hand belief based on what was revealed
+        # Weighted belief update: blend new card-frequency evidence with prior belief.
+        # This preserves behavioral information already captured in the prior instead
+        # of overwriting it entirely with raw card counts.
         if actual_card in self.opponent_hand_belief:
             total_possible = sum(cards_remaining.values())
             if total_possible > 0:
                 for animal in self.animals:
-                    self.opponent_hand_belief[animal] = cards_remaining.get(animal, 0) / total_possible
+                    new_freq = cards_remaining.get(animal, 0) / total_possible
+                    self.opponent_hand_belief[animal] = (
+                        0.7 * new_freq + 0.3 * self.opponent_hand_belief[animal]
+                    )
 
     def get_truth_probability(self, claim: str) -> float:
         """
