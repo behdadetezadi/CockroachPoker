@@ -30,6 +30,49 @@ from belief import BeliefState
 from core import GameState, calculate_cards_remaining, GAME_CONFIG
 
 
+def state_to_obs(state: Dict, config: Dict, belief: BeliefState) -> np.ndarray:
+    """
+    Convert an observable state dict + belief into the 19-float observation vector.
+
+    Shared by CockroachPokerEnv._observe() and SB3DQNAgent so both use
+    identical feature encoding.
+    """
+    max_cards = config['cards_per_animal']
+    features: list = []
+
+    ai_counts: Dict[str, int] = defaultdict(int)
+    for card in state.get('ai_hand', []):
+        ai_counts[card] += 1
+
+    p_up: Dict[str, int] = defaultdict(int)
+    for card in state.get('player_face_up', []):
+        p_up[card] += 1
+
+    a_up: Dict[str, int] = defaultdict(int)
+    for card in state.get('ai_face_up', []):
+        a_up[card] += 1
+
+    for animal in config['animals']:
+        features.append(ai_counts[animal] / max_cards)
+    for animal in config['animals']:
+        features.append(p_up[animal] / max_cards)
+    for animal in config['animals']:
+        features.append(a_up[animal] / max_cards)
+
+    claim = state.get('current_claim')
+    for animal in config['animals']:
+        features.append(1.0 if claim == animal else 0.0)
+
+    if claim:
+        features.append(belief.get_truth_probability(claim))
+        features.append(belief.get_recent_bluff_rate())
+        features.append(ai_counts.get(claim, 0) / max_cards)
+    else:
+        features += [0.5, 0.5, 0.0]
+
+    return np.array(features, dtype=np.float32)
+
+
 def _make_base():
     if _GYM_AVAILABLE:
         return gym.Env
@@ -171,37 +214,4 @@ class CockroachPokerEnv(_make_base()):
         return winner
 
     def _observe(self) -> np.ndarray:
-        max_cards = self.config['cards_per_animal']
-        features: list = []
-
-        ai_counts: Dict[str, int] = defaultdict(int)
-        for card in self.state.ai_hand:
-            ai_counts[card] += 1
-
-        p_up: Dict[str, int] = defaultdict(int)
-        for card in self.state.player_face_up:
-            p_up[card] += 1
-
-        a_up: Dict[str, int] = defaultdict(int)
-        for card in self.state.ai_face_up:
-            a_up[card] += 1
-
-        for animal in self.config['animals']:
-            features.append(ai_counts[animal] / max_cards)
-        for animal in self.config['animals']:
-            features.append(p_up[animal] / max_cards)
-        for animal in self.config['animals']:
-            features.append(a_up[animal] / max_cards)
-
-        claim = self.state.current_claim
-        for animal in self.config['animals']:
-            features.append(1.0 if claim == animal else 0.0)
-
-        if claim:
-            features.append(self.belief.get_truth_probability(claim))
-            features.append(self.belief.get_recent_bluff_rate())
-            features.append(ai_counts.get(claim, 0) / max_cards)
-        else:
-            features += [0.5, 0.5, 0.0]
-
-        return np.array(features, dtype=np.float32)
+        return state_to_obs(self.state.to_dict(), self.config, self.belief)

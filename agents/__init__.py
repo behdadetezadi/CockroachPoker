@@ -2,6 +2,6 @@ from agents.base import Agent
 from agents.pomdp_agent import POMDPAgent
 
 try:
-    from agents.dqn_agent import DQNAgent
+    from agents.sb3_dqn_agent import SB3DQNAgent
 except ImportError:
-    pass  # torch not installed
+    pass  # stable-baselines3 or numpy not installed

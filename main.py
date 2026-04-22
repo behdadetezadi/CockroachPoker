@@ -1,78 +1,71 @@
-"""
-Entry point for the Cockroach Poker game.
-
-Run:  python main.py
-"""
+"""Entry point. Run:  python main.py"""
 
 from core import GAME_CONFIG
 
 
-def _show_rules():
-    print("\n  Game Rules:")
+def _rules():
+    print("\n  Rules:")
     print("  - Select a card, then choose what animal to claim")
     print("  - When AI claims, decide: TRUTH or BLUFF")
     print("  - First to get 3 of the same animal face-up LOSES")
-    print("  - If hands run out, most face-up cards loses")
 
 
 def main():
     print("\n" + "=" * 60)
     print("COCKROACH POKER — RL EDITION")
     print("=" * 60)
-    print("\n1. Play vs RANDOM AI  (collect training data)")
-    print("2. Play vs POMDP AI   (tabular Q-learning)")
-    print("3. Play vs DQN AI     (deep Q-network)")
+    print("\n1. Play vs RANDOM AI     (collect training data)")
+    print("2. Play vs POMDP AI      (tabular Q-learning, trains from logs)")
+    print("3. Play vs SB3 DQN AI    (neural network, trains via self-play)")
     print("4. Exit")
 
     choice = input("\nEnter choice (1-4): ").strip()
 
     if choice == '1':
-        print("\nRandom AI active — play 20-30 games, then run: python train.py")
-        _show_rules()
+        print("\nRandom AI — play 20-30 games, then train POMDP: python train.py pomdp")
+        _rules()
         input("\nPress ENTER to start...")
         from ui import CockroachPokerUI
         CockroachPokerUI().run()
 
     elif choice == '2':
         from agents.pomdp_agent import POMDPAgent
-        print("\nInitialising POMDP agent...")
+        print("\nLoading POMDP agent...")
         agent = POMDPAgent(GAME_CONFIG)
-        stats = agent.get_statistics()
-        print(f"  States learned: {stats['states']}")
-        print(f"  State-action pairs: {stats['state_action_pairs']}")
-        if stats['states'] == 0:
-            print("  WARNING: no training data — agent will respond randomly.")
-            print("  Play some games first, then run: python train.py")
+        s = agent.get_statistics()
+        print(f"  States learned: {s['states']}")
+        if s['states'] == 0:
+            print("  WARNING: not trained yet — will respond randomly.")
+            print("  Collect data (option 1) then run: python train.py pomdp")
         else:
-            print("  Agent is trained and ready.")
-        _show_rules()
+            print("  Ready.")
+        _rules()
         input("\nPress ENTER to start...")
         from ui import CockroachPokerUI
         CockroachPokerUI(ai_agent=agent).run()
-        print("\nTo retrain: python train.py")
+        print("\nRetrain: python train.py pomdp")
 
     elif choice == '3':
         try:
-            from agents.dqn_agent import DQNAgent
+            from agents.sb3_dqn_agent import SB3DQNAgent
         except ImportError:
-            print("PyTorch not installed — cannot use DQN agent.")
+            print("stable-baselines3 not installed.")
+            print("Install with:  pip install stable-baselines3")
             return
-        print("\nInitialising DQN agent...")
-        agent = DQNAgent(GAME_CONFIG)
-        stats = agent.get_statistics()
-        print(f"  Training steps: {stats['training_step']}")
-        print(f"  Epsilon: {stats['epsilon']:.3f}")
-        print(f"  Replay buffer: {stats['replay_buffer_size']}")
-        if stats['training_step'] == 0:
-            print("  WARNING: not trained yet — agent will explore randomly.")
-            print("  Train first: python train.py dqn")
+        print("\nLoading SB3 DQN agent...")
+        agent = SB3DQNAgent(GAME_CONFIG)
+        s = agent.get_statistics()
+        if s['trained']:
+            print(f"  Timesteps trained: {s['timesteps']:,}")
+            print(f"  Ready.")
         else:
-            print("  Agent is trained and ready.")
-        _show_rules()
+            print("  WARNING: not trained yet — will respond randomly.")
+            print("  Train first: python train.py sb3 100000")
+        _rules()
         input("\nPress ENTER to start...")
         from ui import CockroachPokerUI
         CockroachPokerUI(ai_agent=agent).run()
-        print("\nTo retrain: python train.py dqn")
+        print("\nRetrain: python train.py sb3 100000")
 
     elif choice == '4':
         print("Bye!")

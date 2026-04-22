@@ -1,10 +1,12 @@
 """
-Unified training script for both POMDP and DQN agents.
+Unified training script.
 
-Usage:
-    python train.py              # interactive menu
-    python train.py pomdp 10    # train POMDP for 10 epochs
-    python train.py dqn 10      # train DQN for 10 epochs
+Usage (CLI):
+    python train.py pomdp 10          # train POMDP for 10 epochs from game logs
+    python train.py sb3 100000        # train SB3 DQN for 100 000 env steps
+
+Usage (interactive):
+    python train.py
 """
 
 import sys
@@ -13,6 +15,7 @@ from agents.pomdp_agent import POMDPAgent
 
 
 def train_pomdp(config=None, epochs: int = 10, log_dir: str = 'game_logs'):
+    """Offline Q-learning from saved game logs."""
     config = config or GAME_CONFIG
     agent = POMDPAgent(config)
 
@@ -30,75 +33,83 @@ def train_pomdp(config=None, epochs: int = 10, log_dir: str = 'game_logs'):
 
     agent.save_model()
     stats = agent.get_statistics()
-    print(f"\nDone. States learned: {stats['states']}  |  Total updates: {total}")
+    print(f"\nDone.  States learned: {stats['states']}  |  Total Q-updates: {total}")
 
 
-def train_dqn(config=None, epochs: int = 10, log_dir: str = 'game_logs'):
+def train_sb3(config=None, total_timesteps: int = 100_000):
+    """
+    Online DQN training via stable-baselines3.
+
+    The agent plays against a random opponent in the headless CockroachPokerEnv.
+    No game logs needed — SB3 generates its own experience.
+    """
     try:
-        from agents.dqn_agent import DQNAgent
+        from agents.sb3_dqn_agent import SB3DQNAgent
     except ImportError:
-        print("PyTorch not installed — cannot train DQN.")
+        print("Could not import SB3DQNAgent.")
+        print("Install dependencies:  pip install stable-baselines3 gymnasium numpy")
         return
 
     config = config or GAME_CONFIG
-    agent = DQNAgent(config)
+    agent = SB3DQNAgent(config)
 
-    stats = agent.train_from_logs(log_dir, epochs=epochs)
-    if stats['games'] == 0:
+    print(f"\nTraining SB3 DQN for {total_timesteps:,} timesteps via self-play...")
+    print("(SB3 handles replay buffer, target network, epsilon decay automatically)\n")
+    agent.train(total_timesteps=total_timesteps)
+
+    stats = agent.get_statistics()
+    if stats['trained']:
+        print(f"\nDone.  Timesteps: {stats['timesteps']:,}  |  Policy: {stats['policy']}")
+
+
+def _print_pomdp_stats():
+    agent = POMDPAgent(GAME_CONFIG)
+    s = agent.get_statistics()
+    print(f"  States: {s['states']}")
+    print(f"  State-action pairs: {s['state_action_pairs']}")
+    if s['state_action_pairs']:
+        print(f"  Avg Q-value: {s['avg_q_value']:.4f}")
+    print(f"  Belief observations: {s['belief_state']['total_observations']}")
+
+
+def _print_sb3_stats():
+    try:
+        from agents.sb3_dqn_agent import SB3DQNAgent
+    except ImportError:
+        print("stable-baselines3 not installed.")
         return
-
-    agent.save_model()
-    print(f"\nDone. Games: {stats['games']}  |  Experiences: {stats['experiences']}  "
-          f"|  Final loss: {stats['final_loss']:.4f}")
-
-
-def _print_stats(agent_type: str):
-    config = GAME_CONFIG
-    if agent_type == 'pomdp':
-        agent = POMDPAgent(config)
-        stats = agent.get_statistics()
-        print(f"  States: {stats['states']}")
-        print(f"  State-action pairs: {stats['state_action_pairs']}")
-        if stats['state_action_pairs']:
-            print(f"  Avg Q-value: {stats['avg_q_value']:.4f}")
-        print(f"  Belief observations: {stats['belief_state']['total_observations']}")
+    s = SB3DQNAgent(GAME_CONFIG).get_statistics()
+    if s['trained']:
+        print(f"  Timesteps trained: {s['timesteps']:,}")
+        print(f"  Policy: {s['policy']}")
+        print(f"  Device: {s['device']}")
     else:
-        try:
-            from agents.dqn_agent import DQNAgent
-        except ImportError:
-            print("PyTorch not installed.")
-            return
-        agent = DQNAgent(config)
-        stats = agent.get_statistics()
-        print(f"  Training steps: {stats['training_step']}")
-        print(f"  Epsilon: {stats['epsilon']:.4f}")
-        print(f"  Replay buffer: {stats['replay_buffer_size']}")
-        print(f"  Parameters: {stats['total_parameters']}")
+        print("  Not trained yet.")
 
 
 def main():
-    # CLI shortcut: python train.py <agent> <epochs>
+    # CLI shortcut
     if len(sys.argv) >= 2:
         agent_arg = sys.argv[1].lower()
-        epochs = int(sys.argv[2]) if len(sys.argv) >= 3 else 10
         if agent_arg == 'pomdp':
+            epochs = int(sys.argv[2]) if len(sys.argv) >= 3 else 10
             train_pomdp(epochs=epochs)
-        elif agent_arg == 'dqn':
-            train_dqn(epochs=epochs)
+        elif agent_arg == 'sb3':
+            steps = int(sys.argv[2]) if len(sys.argv) >= 3 else 100_000
+            train_sb3(total_timesteps=steps)
         else:
-            print(f"Unknown agent '{agent_arg}'. Use 'pomdp' or 'dqn'.")
+            print(f"Unknown agent '{agent_arg}'. Use 'pomdp' or 'sb3'.")
         return
 
-    # Interactive menu
     print("\n" + "=" * 60)
     print("COCKROACH POKER — TRAINING")
     print("=" * 60)
-    print("\n1. Train POMDP agent (tabular Q-learning)")
-    print("2. Train DQN agent (deep Q-network)")
+    print("\n1. Train POMDP agent      (offline, from game logs)")
+    print("2. Train SB3 DQN agent    (online self-play, no logs needed)")
     print("3. View POMDP statistics")
-    print("4. View DQN statistics")
+    print("4. View SB3 DQN statistics")
     print("5. Reset POMDP model")
-    print("6. Reset DQN model")
+    print("6. Reset SB3 DQN model")
     print("7. Exit")
 
     choice = input("\nEnter choice (1-7): ").strip()
@@ -108,14 +119,14 @@ def main():
         train_pomdp(epochs=int(epochs) if epochs.isdigit() else 10)
 
     elif choice == '2':
-        epochs = input("Training epochs [default 10]: ").strip()
-        train_dqn(epochs=int(epochs) if epochs.isdigit() else 10)
+        steps = input("Timesteps [default 100000]: ").strip()
+        train_sb3(total_timesteps=int(steps) if steps.isdigit() else 100_000)
 
     elif choice == '3':
-        _print_stats('pomdp')
+        _print_pomdp_stats()
 
     elif choice == '4':
-        _print_stats('dqn')
+        _print_sb3_stats()
 
     elif choice == '5':
         if input("Delete POMDP model? (yes/no): ").strip().lower() == 'yes':
@@ -128,9 +139,9 @@ def main():
                     pass
 
     elif choice == '6':
-        if input("Delete DQN model? (yes/no): ").strip().lower() == 'yes':
+        if input("Delete SB3 DQN model? (yes/no): ").strip().lower() == 'yes':
             import os
-            for f in ('dqn_model.pth', 'dqn_model_metadata.json'):
+            for f in ('sb3_dqn.zip',):
                 try:
                     os.remove(f)
                     print(f"Deleted {f}")
