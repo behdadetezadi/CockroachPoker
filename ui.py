@@ -1,6 +1,5 @@
 import random
 from collections import defaultdict
-from typing import List, Optional, Tuple
 
 import pygame
 
@@ -106,7 +105,7 @@ class Card:
 class CockroachPokerUI:
     """Main game controller — UI + game flow. Accepts any Agent (or None for random AI)."""
 
-    def __init__(self, ai_agent: Optional[Agent] = None):
+    def __init__(self, ai_agent: Agent | None = None):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Cockroach Poker - RL Edition")
         self.clock = pygame.time.Clock()
@@ -118,16 +117,16 @@ class CockroachPokerUI:
         self.state.deal_hands()
         self.state.claiming_player = random.choice(['player', 'ai'])
 
-        self.selected_card: Optional[int] = None
-        self.selected_claim: Optional[str] = None
+        self.selected_card: int | None = None
+        self.selected_claim: str | None = None
         self.message = ""
         self.message_color = BLACK
         self.sub_message = ""
 
-        self.player_cards: List[Card] = []
-        self.ai_cards: List[Card] = []
-        self.claim_buttons: List[Tuple] = []
-        self.response_buttons: List[Tuple] = []
+        self.player_cards: list[Card] = []
+        self.ai_cards: list[Card] = []
+        self.claim_buttons: list[tuple] = []
+        self.response_buttons: list[tuple] = []
 
         self._setup_ui()
 
@@ -318,6 +317,11 @@ class CockroachPokerUI:
         claim = self.state.current_claim
         is_truth = (card == claim)
 
+        # Snapshot face-up piles BEFORE reveal so the logged observation matches
+        # what the AI actually saw when it made the truth/bluff decision.
+        pre_player_face_up = self.state.player_face_up.copy()
+        pre_ai_face_up = self.state.ai_face_up.copy()
+
         if (response == 'truth' and is_truth) or (response == 'bluff' and not is_truth):
             self.state.player_face_up.append(card)
             self.message = f"AI calls {response.upper()}! Correct! The card was a {card}"
@@ -341,8 +345,8 @@ class CockroachPokerUI:
 
         log_state = {
             'ai_hand': self.state.ai_hand.copy(),
-            'player_face_up': self.state.player_face_up.copy(),
-            'ai_face_up': self.state.ai_face_up.copy(),
+            'player_face_up': pre_player_face_up,
+            'ai_face_up': pre_ai_face_up,
             'current_claim': claim,
             'current_card': card,
             'game_over': is_terminal,
@@ -413,8 +417,8 @@ class CockroachPokerUI:
                 elif winner == 'ai':
                     reward -= 50
 
-                if self.agent:
-                    self.agent.update_belief(claim, card, self._cards_remaining())
+                # No belief update here: this claim was the AI's own, so it says
+                # nothing about the person's bluffing.
 
                 log_state = self.state.to_dict()
                 log_state['game_over'] = is_terminal

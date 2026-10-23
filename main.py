@@ -56,16 +56,16 @@ def main():
         agent = SB3DQNAgent(GAME_CONFIG)
         s = agent.get_statistics()
         if s['trained']:
-            print(f"  Timesteps trained: {s['timesteps']:,}")
+            print(f"  Grad steps: {s['grad_steps']:,}")
             print(f"  Ready.")
         else:
             print("  WARNING: not trained yet — will respond randomly.")
-            print("  Train first: python train.py sb3 100000")
+            print("  Train first: python train.py sb3 10")
         _rules()
         input("\nPress ENTER to start...")
         from ui import CockroachPokerUI
         CockroachPokerUI(ai_agent=agent).run()
-        print("\nRetrain: python train.py sb3 100000")
+        print("\nRetrain: python train.py sb3 10")
 
     elif choice == '4':
         print("Bye!")

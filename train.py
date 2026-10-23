@@ -2,8 +2,8 @@
 Unified training script.
 
 Usage (CLI):
-    python train.py pomdp 10          # train POMDP for 10 epochs from game logs
-    python train.py sb3 100000        # train SB3 DQN for 100 000 env steps
+    python train.py pomdp 10    # train POMDP for 10 epochs from game logs
+    python train.py sb3 10      # train SB3 DQN for 10 epochs from game logs
 
 Usage (interactive):
     python train.py
@@ -36,12 +36,13 @@ def train_pomdp(config=None, epochs: int = 10, log_dir: str = 'game_logs'):
     print(f"\nDone.  States learned: {stats['states']}  |  Total Q-updates: {total}")
 
 
-def train_sb3(config=None, total_timesteps: int = 100_000):
+def train_sb3(config=None, epochs: int = 10, log_dir: str = 'game_logs'):
     """
-    Online DQN training via stable-baselines3.
+    Offline DQN training from human game logs.
 
-    The agent plays against a random opponent in the headless CockroachPokerEnv.
-    No game logs needed — SB3 generates its own experience.
+    Reads game_logs/*.json and runs gradient steps directly on SB3's
+    q_net / q_net_target. No self-play — learns the specific person's
+    bluffing patterns from real games.
     """
     try:
         from agents.sb3_dqn_agent import SB3DQNAgent
@@ -53,13 +54,12 @@ def train_sb3(config=None, total_timesteps: int = 100_000):
     config = config or GAME_CONFIG
     agent = SB3DQNAgent(config)
 
-    print(f"\nTraining SB3 DQN for {total_timesteps:,} timesteps via self-play...")
-    print("(SB3 handles replay buffer, target network, epsilon decay automatically)\n")
-    agent.train(total_timesteps=total_timesteps)
+    print(f"\nTraining SB3 DQN for {epochs} epoch(s) from logs in '{log_dir}'...")
+    stats = agent.train_from_logs(log_dir, epochs=epochs)
 
-    stats = agent.get_statistics()
-    if stats['trained']:
-        print(f"\nDone.  Timesteps: {stats['timesteps']:,}  |  Policy: {stats['policy']}")
+    if stats.get('experiences', 0):
+        print(f"\nDone.  Games: {stats['games']}  |  Experiences: {stats['experiences']}"
+              f"  |  Grad steps: {stats.get('grad_steps', 0)}")
 
 
 def _print_pomdp_stats():
@@ -80,9 +80,10 @@ def _print_sb3_stats():
         return
     s = SB3DQNAgent(GAME_CONFIG).get_statistics()
     if s['trained']:
-        print(f"  Timesteps trained: {s['timesteps']:,}")
+        print(f"  Grad steps: {s['grad_steps']:,}")
         print(f"  Policy: {s['policy']}")
         print(f"  Device: {s['device']}")
+        print(f"  Belief observations: {s['belief_observations']}")
     else:
         print("  Not trained yet.")
 
@@ -95,8 +96,8 @@ def main():
             epochs = int(sys.argv[2]) if len(sys.argv) >= 3 else 10
             train_pomdp(epochs=epochs)
         elif agent_arg == 'sb3':
-            steps = int(sys.argv[2]) if len(sys.argv) >= 3 else 100_000
-            train_sb3(total_timesteps=steps)
+            epochs = int(sys.argv[2]) if len(sys.argv) >= 3 else 10
+            train_sb3(epochs=epochs)
         else:
             print(f"Unknown agent '{agent_arg}'. Use 'pomdp' or 'sb3'.")
         return
@@ -105,7 +106,7 @@ def main():
     print("COCKROACH POKER — TRAINING")
     print("=" * 60)
     print("\n1. Train POMDP agent      (offline, from game logs)")
-    print("2. Train SB3 DQN agent    (online self-play, no logs needed)")
+    print("2. Train SB3 DQN agent    (offline, from game logs)")
     print("3. View POMDP statistics")
     print("4. View SB3 DQN statistics")
     print("5. Reset POMDP model")
@@ -119,8 +120,8 @@ def main():
         train_pomdp(epochs=int(epochs) if epochs.isdigit() else 10)
 
     elif choice == '2':
-        steps = input("Timesteps [default 100000]: ").strip()
-        train_sb3(total_timesteps=int(steps) if steps.isdigit() else 100_000)
+        epochs = input("Training epochs [default 10]: ").strip()
+        train_sb3(epochs=int(epochs) if epochs.isdigit() else 10)
 
     elif choice == '3':
         _print_pomdp_stats()

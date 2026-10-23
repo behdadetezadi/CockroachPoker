@@ -3,7 +3,6 @@ import pickle
 import random
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
 
 from belief import BeliefState
 from core import calculate_cards_remaining, load_all_games
@@ -18,10 +17,10 @@ class POMDPAgent(Agent):
     belief and bluff-rate features to keep the table a manageable size.
     """
 
-    def __init__(self, config: Dict, model_path: str = 'rl_model.pkl'):
+    def __init__(self, config: dict, model_path: str = 'rl_model.pkl'):
         self.config = config
         self.model_path = model_path
-        self.q_table: Dict = defaultdict(lambda: defaultdict(float))
+        self.q_table: dict = defaultdict(lambda: defaultdict(float))
 
         self.learning_rate = 0.1
         self.discount_factor = 0.8
@@ -34,7 +33,7 @@ class POMDPAgent(Agent):
     # Observable state helpers
     # ------------------------------------------------------------------
 
-    def get_observable_state(self, state: Dict) -> Dict:
+    def get_observable_state(self, state: dict) -> dict:
         """Strip hidden information — no cheating."""
         return {
             'ai_hand': state.get('ai_hand', []),
@@ -50,7 +49,7 @@ class POMDPAgent(Agent):
                 return labels[i]
         return labels[-1]
 
-    def state_to_key(self, state: Dict, belief: Optional[BeliefState] = None) -> str:
+    def state_to_key(self, state: dict, belief: BeliefState | None = None) -> str:
         belief = belief or self.belief_state
 
         ai_counts: Dict[str, int] = defaultdict(int)
@@ -85,7 +84,7 @@ class POMDPAgent(Agent):
     # Agent interface
     # ------------------------------------------------------------------
 
-    def choose_response(self, state: Dict) -> str:
+    def choose_response(self, state: dict) -> str:
         obs = self.get_observable_state(state)
         key = self.state_to_key(obs)
 
@@ -94,14 +93,14 @@ class POMDPAgent(Agent):
 
         return max(self.q_table[key], key=self.q_table[key].get)
 
-    def choose_card_and_claim(self, hand: List[str]) -> Tuple[Optional[str], Optional[str]]:
+    def choose_card_and_claim(self, hand: list[str]) -> tuple[str | None, str | None]:
         if not hand:
             return None, None
         card = random.choice(hand)
         claim = card if random.random() < 0.5 else random.choice(self.config['animals'])
         return card, claim
 
-    def update_belief(self, claim: str, actual_card: str, cards_remaining: Dict[str, int]):
+    def update_belief(self, claim: str, actual_card: str, cards_remaining: dict[str, int]):
         self.belief_state.update_after_reveal(claim, actual_card, cards_remaining)
 
     # ------------------------------------------------------------------
@@ -110,13 +109,13 @@ class POMDPAgent(Agent):
 
     def update_q_value(
         self,
-        state: Dict,
+        state: dict,
         action: str,
         reward: float,
-        next_state: Dict,
+        next_state: dict,
         is_terminal: bool = False,
-        belief: Optional[BeliefState] = None,
-        next_belief: Optional[BeliefState] = None,
+        belief: BeliefState | None = None,
+        next_belief: BeliefState | None = None,
     ):
         obs = self.get_observable_state(state)
         obs_next = self.get_observable_state(next_state)
@@ -158,11 +157,15 @@ class POMDPAgent(Agent):
                     is_terminal = state.get('game_over', False)
                     next_state = game[i + 1]['state'] if i + 1 < len(game) else state
 
+                    # The belief models the PERSON, whose claims are revealed only
+                    # when the AI responds. Player-respond entries reveal the AI's
+                    # own claims and must not feed the opponent model.
                     next_belief = game_belief.copy()
                     claim = state.get('current_claim')
                     actual = state.get('current_card')
                     if claim and actual:
                         remaining = calculate_cards_remaining(state, self.config)
+                        remaining[actual] = max(0, remaining[actual] - 1)  # state is pre-reveal
                         next_belief.update_after_reveal(claim, actual, remaining)
 
                     self.update_q_value(
@@ -170,13 +173,7 @@ class POMDPAgent(Agent):
                         is_terminal, game_belief, next_belief,
                     )
                     total_updates += 1
-
-                if action_data.get('action') == 'respond':
-                    claim = entry['state'].get('current_claim')
-                    actual = entry['state'].get('current_card')
-                    if claim and actual:
-                        remaining = calculate_cards_remaining(entry['state'], self.config)
-                        game_belief.update_after_reveal(claim, actual, remaining)
+                    game_belief = next_belief
 
         return total_updates
 
@@ -216,7 +213,7 @@ class POMDPAgent(Agent):
         else:
             print("No saved model found. Starting with empty Q-table")
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         if not self.q_table:
             q_stats = {'states': 0, 'state_action_pairs': 0,
                        'avg_q_value': 0, 'max_q_value': 0, 'min_q_value': 0}

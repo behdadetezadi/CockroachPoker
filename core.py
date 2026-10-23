@@ -3,7 +3,6 @@ import os
 import random
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Optional
 
 GAME_CONFIG = {
     'hand_size': 5,
@@ -13,7 +12,7 @@ GAME_CONFIG = {
 }
 
 
-def calculate_cards_remaining(state: Dict, config: Dict) -> Dict[str, int]:
+def calculate_cards_remaining(state: dict, config: dict) -> dict[str, int]:
     """
     Cards not yet accounted for from the AI's perspective.
     Subtracts AI's own hand and both face-up piles from the total deck.
@@ -33,7 +32,7 @@ def calculate_cards_remaining(state: Dict, config: Dict) -> Dict[str, int]:
     return cards_remaining
 
 
-def load_all_games(log_dir: str) -> List[List[Dict]]:
+def load_all_games(log_dir: str) -> list[list[dict]]:
     """Load every game-log JSON from log_dir, sorted by filename."""
     games = []
     if not os.path.exists(log_dir):
@@ -50,21 +49,21 @@ def load_all_games(log_dir: str) -> List[List[Dict]]:
 
 
 class GameState:
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         self.config = config
         self.deck = self._create_deck()
-        self.player_hand: List[str] = []
-        self.ai_hand: List[str] = []
-        self.player_face_up: List[str] = []
-        self.ai_face_up: List[str] = []
+        self.player_hand: list[str] = []
+        self.ai_hand: list[str] = []
+        self.player_face_up: list[str] = []
+        self.ai_face_up: list[str] = []
         self.claiming_player = 'player'
-        self.current_claim: Optional[str] = None
-        self.current_card: Optional[str] = None
+        self.current_claim: str | None = None
+        self.current_card: str | None = None
         self.phase = 'claim'
         self.game_over = False
-        self.winner: Optional[str] = None
+        self.winner: str | None = None
 
-    def _create_deck(self) -> List[str]:
+    def _create_deck(self) -> list[str]:
         deck = []
         for animal in self.config['animals']:
             deck.extend([animal] * self.config['cards_per_animal'])
@@ -76,7 +75,7 @@ class GameState:
         self.player_hand = [self.deck.pop() for _ in range(hand_size)]
         self.ai_hand = [self.deck.pop() for _ in range(hand_size)]
 
-    def check_loss_condition(self) -> Optional[str]:
+    def check_loss_condition(self) -> str | None:
         threshold = self.config['lose_threshold']
         for animal in self.config['animals']:
             if self.player_face_up.count(animal) >= threshold:
@@ -85,7 +84,7 @@ class GameState:
                 return 'player'
         return None
 
-    def check_empty_hands(self) -> Optional[str]:
+    def check_empty_hands(self) -> str | None:
         if not self.player_hand and not self.ai_hand:
             player_count = len(self.player_face_up)
             ai_count = len(self.ai_face_up)
@@ -100,7 +99,7 @@ class GameState:
     def switch_claiming_player(self):
         self.claiming_player = 'ai' if self.claiming_player == 'player' else 'player'
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             'player_hand': self.player_hand.copy(),
             'ai_hand': self.ai_hand.copy(),
@@ -122,7 +121,7 @@ class DataLogger:
         self.current_game_log: List[Dict] = []
         self.game_count = len([f for f in os.listdir(log_dir) if f.endswith('.json')])
 
-    def log_state_action(self, state: Dict, action: Dict, reward: float = 0):
+    def log_state_action(self, state: dict, action: dict, reward: float = 0):
         self.current_game_log.append({
             'timestamp': datetime.now().isoformat(),
             'state': state,

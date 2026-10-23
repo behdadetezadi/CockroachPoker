@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Dict, List
 
 
 class BeliefState:
@@ -11,16 +10,16 @@ class BeliefState:
     - A behavioural model of how often the opponent tells truth vs bluffs per animal
     """
 
-    def __init__(self, animals: List[str]):
+    def __init__(self, animals: list[str]):
         self.animals = animals
-        self.opponent_hand_belief: Dict[str, float] = {
+        self.opponent_hand_belief: dict[str, float] = {
             animal: 1.0 / len(animals) for animal in animals
         }
-        self.claim_history: List[Dict] = []
-        self.truth_count: Dict[str, int] = defaultdict(int)
-        self.bluff_count: Dict[str, int] = defaultdict(int)
+        self.claim_history: list[dict] = []
+        self.truth_count: dict[str, int] = defaultdict(int)
+        self.bluff_count: dict[str, int] = defaultdict(int)
 
-    def update_after_reveal(self, claim: str, actual_card: str, cards_remaining: Dict[str, int]):
+    def update_after_reveal(self, claim: str, actual_card: str, cards_remaining: dict[str, int]):
         """
         Update belief and behavioural model after a card is revealed.
 
@@ -89,7 +88,7 @@ class BeliefState:
         new.claim_history = list(self.claim_history)
         return new
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             'hand_belief': dict(self.opponent_hand_belief),
             'truth_counts': dict(self.truth_count),
